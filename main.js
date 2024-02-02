@@ -49,6 +49,14 @@ let secondCube = null;
 let firstCubeCenter = null;
 let normalVector = null;
 
+// Variables para la animación
+let isAnimating = false;
+let animationGroup;
+let rotationAxis;
+let targetRotation = 0;
+let currentRotation = 0;
+let rotationSpeed = 0.1;
+
 // Manejo de eventos del mouse
 document.addEventListener("mousedown", onMouseDown, false);
 document.addEventListener("mouseup", onMouseUp, false);
@@ -128,8 +136,6 @@ function updateRaycasterAndGetIntersects(event) {
 }
 
 function onMouseDown(event) {
-  restartSelected();
-
   const intersects = updateRaycasterAndGetIntersects(event);
 
   if (intersects.length > 0) {
@@ -143,6 +149,9 @@ function onMouseDown(event) {
 }
 
 function onMouseMove(event) {
+  // No está animando
+  if (isAnimating) return;
+
   // No se ha clickado aún
   if (selectedCube === null) {
     return;
@@ -179,11 +188,60 @@ function onMouseMove(event) {
       return;
     }
 
+    selectedCube.children[0].material.color = new THREE.Color(0xff0000);
+    secondCube.children[0].material.color = new THREE.Color(0xff0000);
+
+    // Crear grupo para rotar todos los cubos
+    const group = new THREE.Group();
+    scene.add(group);
+
     selectedCubes.forEach((cube) => {
-      cube.children[0].material.color = new THREE.Color(0xff0000);
+      group.add(cube);
     });
 
-    secondCube = null;
+    const rotationAngle = Math.PI / 2;
+
+    startRotationAnimation(group, plane.normal, rotationAngle);
+  }
+}
+
+function startRotationAnimation(group, axis, angle) {
+  if (isAnimating) return; // Evita iniciar una nueva animación si ya está en curso
+
+  animationGroup = group;
+  rotationAxis = axis;
+  targetRotation = angle;
+  currentRotation = 0;
+  isAnimating = true;
+
+  animateRotation();
+}
+
+function animateRotation() {
+  if (!isAnimating) return;
+
+  // Calcula el ángulo de rotación para este frame
+  let step = rotationSpeed;
+  currentRotation += step;
+
+  if (currentRotation >= targetRotation) {
+    step -= currentRotation - targetRotation; // Ajusta el último paso de rotación
+    isAnimating = false;
+  }
+
+  animationGroup.rotateOnWorldAxis(rotationAxis, step);
+
+  if (isAnimating) {
+    requestAnimationFrame(animateRotation);
+  } else {
+    // Finalizar animación: desmonta los cubos del grupo y limpia
+    while (animationGroup.children.length > 0) {
+      const child = animationGroup.children[0];
+      child.updateMatrixWorld(); // Asegura que la transformación del child sea actualizada
+      scene.attach(child); // Vuelve a adjuntar el cubo a la escena directamente
+    }
+    scene.remove(animationGroup);
+    restartSelected();
   }
 }
 
