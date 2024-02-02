@@ -23,7 +23,7 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 // Constantes para los cubos
-const gap = 0.5;
+const gap = 0.25;
 const cubeSize = 5;
 const colors = {
   white: new THREE.MeshBasicMaterial({ color: "#fcfcfc" }),
@@ -42,8 +42,12 @@ createRubik();
 const orbitControls = new OrbitControls(camera, renderer.domElement);
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+
+// Crear variabes globales
 let selectedCube = null;
-let initialPointer = null;
+let secondCube = null;
+let firstCubeCenter = null;
+let normalVector = null;
 
 // Manejo de eventos del mouse
 document.addEventListener("mousedown", onMouseDown, false);
@@ -96,8 +100,11 @@ function createSingleCube(x, y, z) {
 
 function restartSelected() {
   selectedCube = null;
+  secondCube = null;
   scene.children
-    .filter((child) => child.type === "Mesh")
+    .filter(
+      (child) => child.type === "Mesh" && child.geometry.type != "PlaneGeometry"
+    )
     .forEach((mesh) => {
       mesh.children[0].material.color = new THREE.Color(0x000000);
     });
@@ -106,7 +113,6 @@ function restartSelected() {
 function onMouseUp(event) {
   orbitControls.enabled = true;
   restartSelected();
-  initialPointer = null;
 }
 
 // Función auxiliar para actualizar el raycaster y obtener los objetos intersectados
@@ -116,7 +122,8 @@ function updateRaycasterAndGetIntersects(event) {
 
   raycaster.setFromCamera(pointer, camera);
 
-  return raycaster.intersectObjects(scene.children, false)
+  return raycaster
+    .intersectObjects(scene.children, false)
     .filter((intersect) => intersect.object.type === "Mesh");
 }
 
@@ -129,35 +136,117 @@ function onMouseDown(event) {
     orbitControls.enabled = false;
 
     selectedCube = intersects[0].object;
-    selectedCube.children[0].material.color = new THREE.Color(0xff0000);
 
-    initialPointer = pointer;
+    firstCubeCenter = getCubeCenter(selectedCube);
+    normalVector = getNormalVector(intersects[0]);
   }
 }
 
 function onMouseMove(event) {
+  // No se ha clickado aún
   if (selectedCube === null) {
+    return;
+  }
+
+  // Ya hay un segundo objeto cruzado
+  if (secondCube != null) {
     return;
   }
 
   const intersects = updateRaycasterAndGetIntersects(event);
 
   if (intersects.length > 0) {
-    const secondCube = intersects[0].object;
+    secondCube = intersects[0].object;
 
     if (selectedCube === secondCube) {
+      secondCube = null;
       return;
     }
 
-    secondCube.children[0].material.color = new THREE.Color(0xff0000);
+    let secondCubeCenter = getCubeCenter(secondCube);
 
-    // TODO: no detecta bien el cursor
-    const secondPointer = pointer;
+    const centersVector = new THREE.Vector3().subVectors(
+      secondCubeCenter,
+      firstCubeCenter
+    );
 
-    const difference = initialPointer.distanceToSquared(secondPointer);
+    const plane = createPlaneFromVectors(normalVector, centersVector);
+
+    const selectedCubes = getCubesInPlane(plane);
+
+    if (selectedCubes.length != 9) {
+      secondCube = null;
+      return;
+    }
+
+    selectedCubes.forEach((cube) => {
+      cube.children[0].material.color = new THREE.Color(0xff0000);
+    });
+
+    secondCube = null;
   }
 }
 
+function getCubesInPlane(plane) {
+  // Margen de deteccion
+  const epsilon = 0.1;
+  const intersectingCubes = [];
+
+  // Comprobar todos los cubos de la escena
+  scene.children.forEach((child) => {
+    if (child.isMesh && child.geometry.type === "BoxGeometry") {
+      // Calcula el centro del cubo
+      const cubeCenter = getCubeCenter(child);
+
+      // Comprueba si el centro del cubo está lo suficientemente cerca del plano
+      if (Math.abs(plane.distanceToPoint(cubeCenter)) < epsilon) {
+        intersectingCubes.push(child);
+      }
+    }
+  });
+
+  return intersectingCubes;
+}
+
+function createPlaneFromVectors(vector1, vector2) {
+  // Calcula la normal del plano como el producto de ambos vectores
+  const normal = new THREE.Vector3().crossVectors(vector1, vector2).normalize();
+
+  // Usar el primer vector como punto en el plano
+  const pointOnPlane = firstCubeCenter;
+
+  // Crear el plano
+  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
+    normal,
+    pointOnPlane
+  );
+
+  return plane;
+}
+
+// Calcula la normal del cubo seleccionado
+function getNormalVector(intersect) {
+  const face = intersect.face;
+  const normal = face.normal.clone();
+  return normal;
+}
+
+// Calcula el centro de un cubo
+function getCubeCenter(mesh) {
+  var middle = new THREE.Vector3();
+  var geometry = mesh.geometry;
+
+  geometry.computeBoundingBox();
+
+  middle.x = geometry.boundingBox.max.x + geometry.boundingBox.min.x;
+  middle.y = geometry.boundingBox.max.y + geometry.boundingBox.min.y;
+  middle.z = geometry.boundingBox.max.z + geometry.boundingBox.min.z;
+
+  // Aplica la transformación del objeto para obtener las coordenadas del mundo
+  middle.applyMatrix4(mesh.matrixWorld);
+
+  return middle;
+}
 
 // Bucle principal del juego
 function gameLoop() {
