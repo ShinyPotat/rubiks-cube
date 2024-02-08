@@ -53,7 +53,7 @@ let normalVector = null;
 let isAnimating = false;
 let animationGroup;
 let rotationAxis;
-let targetRotation = 0;
+let targetRotation = Math.PI / 2;
 let currentRotation = 0;
 let rotationSpeed = 0.1;
 
@@ -109,13 +109,6 @@ function createSingleCube(x, y, z) {
 function restartSelected() {
   selectedCube = null;
   secondCube = null;
-  scene.children
-    .filter(
-      (child) => child.type === "Mesh" && child.geometry.type != "PlaneGeometry"
-    )
-    .forEach((mesh) => {
-      mesh.children[0].material.color = new THREE.Color(0x000000);
-    });
 }
 
 function onMouseUp(event) {
@@ -149,7 +142,7 @@ function onMouseDown(event) {
 }
 
 function onMouseMove(event) {
-  // No está animando
+  // Está siendo rotado
   if (isAnimating) return;
 
   // No se ha clickado aún
@@ -188,9 +181,6 @@ function onMouseMove(event) {
       return;
     }
 
-    selectedCube.children[0].material.color = new THREE.Color(0xff0000);
-    secondCube.children[0].material.color = new THREE.Color(0xff0000);
-
     // Crear grupo para rotar todos los cubos
     const group = new THREE.Group();
     scene.add(group);
@@ -199,18 +189,15 @@ function onMouseMove(event) {
       group.add(cube);
     });
 
-    const rotationAngle = Math.PI / 2;
-
-    startRotationAnimation(group, plane.normal, rotationAngle);
+    startRotationAnimation(group, plane.normal);
   }
 }
 
-function startRotationAnimation(group, axis, angle) {
+function startRotationAnimation(group, axis) {
   if (isAnimating) return; // Evita iniciar una nueva animación si ya está en curso
 
   animationGroup = group;
   rotationAxis = axis;
-  targetRotation = angle;
   currentRotation = 0;
   isAnimating = true;
 
@@ -236,9 +223,9 @@ function animateRotation() {
   } else {
     // Finalizar animación: desmonta los cubos del grupo y limpia
     while (animationGroup.children.length > 0) {
-      const child = animationGroup.children[0];
-      child.updateMatrixWorld(); // Asegura que la transformación del child sea actualizada
-      scene.attach(child); // Vuelve a adjuntar el cubo a la escena directamente
+      const cube = animationGroup.children[0];
+      cube.updateMatrixWorld(); // Asegura que la transformación del cubo sea actualizada
+      scene.attach(cube); // Vuelve a adjuntar el cubo a la escena directamente
     }
     scene.remove(animationGroup);
     restartSelected();
@@ -251,14 +238,14 @@ function getCubesInPlane(plane) {
   const intersectingCubes = [];
 
   // Comprobar todos los cubos de la escena
-  scene.children.forEach((child) => {
-    if (child.isMesh && child.geometry.type === "BoxGeometry") {
+  scene.children.forEach((cube) => {
+    if (cube.isMesh && cube.geometry.type === "BoxGeometry") {
       // Calcula el centro del cubo
-      const cubeCenter = getCubeCenter(child);
+      const cubeCenter = getCubeCenter(cube);
 
       // Comprueba si el centro del cubo está lo suficientemente cerca del plano
       if (Math.abs(plane.distanceToPoint(cubeCenter)) < epsilon) {
-        intersectingCubes.push(child);
+        intersectingCubes.push(cube);
       }
     }
   });
